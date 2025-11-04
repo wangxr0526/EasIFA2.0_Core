@@ -160,15 +160,6 @@ MIT License
 
 If you use EasIFA in your research, please cite:
 
-```bibtex
-@article{easifa2024,
-  title={EasIFA: Enzyme Active Site Inference Framework},
-  author={Your Name},
-  journal={Your Journal},
-  year={2024}
-}
+```
 ```
 
-## Contact
-
-For questions and feedback, please contact: your.email@example.com
