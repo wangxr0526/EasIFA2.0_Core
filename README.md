@@ -21,23 +21,13 @@ EasIFA Core is the inference module for predicting enzyme active sites using pro
 ### One-Command Setup (Recommended)
 
 ```bash
+git clone https://github.com/wangxr0526/EasIFA2.0_Core.git
+cd EasIFA2.0_Core
 bash quick_setup.sh
 ```
 
 This will automatically download model checkpoints and set up the conda environment.
 
-### Manual Installation
-
-```bash
-# Clone the repository
-git clone https://github.com/wangxr0526/EasIFA2.0_Core.git
-cd EasIFA2.0_Core
-
-# Install dependencies
-pip install -e .
-
-# Download model checkpoints (see INSTALLATION.md)
-```
 
 ## Requirements
 
