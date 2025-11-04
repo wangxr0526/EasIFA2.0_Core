@@ -16,29 +16,44 @@ EasIFA Core is the inference module for predicting enzyme active sites using pro
   
 - Easy-to-use command-line interface
 
-## Installation
+## Quick Installation
+
+### One-Command Setup (Recommended)
 
 ```bash
-pip install -e .
+bash quick_setup.sh
 ```
 
-Or install from source:
+This will automatically download model checkpoints and set up the conda environment.
+
+### Manual Installation
 
 ```bash
-git clone https://github.com/wangxr0526/EasIFA2.git
+# Clone the repository
+git clone https://github.com/wangxr0526/EasIFA2.0_Core.git
 cd EasIFA2.0_Core
+
+# Install dependencies
 pip install -e .
+
+# Download model checkpoints (see INSTALLATION.md)
 ```
 
 ## Requirements
 
 - Python >= 3.8
 - PyTorch >= 1.10
+- safetensors >= 0.3.0
 - RDKit
 - DGL (Deep Graph Library)
 - ESM (Evolutionary Scale Modeling)
 - TorchDrug
 - Other dependencies (see requirements.txt)
+
+**System Requirements:**
+- 16 GB RAM (minimum 8 GB)
+- 20 GB disk space for models
+- GPU optional (NVIDIA CUDA for faster inference)
 
 ## Usage
 
