@@ -1,7 +1,7 @@
 [
   {
     "id": "protein_1",
-    "enzyme_structure": "/home/xiaoruiwang/data/ubuntu_work_beta/single_step_work/EasIFA2.0_Core/test/test_inferece_input/AF-A0A2K5QMP9-F1-model_v4.pdb",
+    "enzyme_structure": "test/test_inferece_input/AF-A0A2K5QMP9-F1-model_v4.pdb",
     "rxn_smiles": "O.OCC1OC(OC2C(O)C(CO)OC(OC3C(O)C(O)OC(CO)C3O)C2O)C(O)C(O)C1O>>O=C[C@H](O)[C@@H](O)[C@H](O)[C@H](O)CO"
   },
   {
@@ -15,6 +15,6 @@
   },
   {
     "id": "protein_4_structure_only",
-    "enzyme_structure": "/home/xiaoruiwang/data/ubuntu_work_beta/single_step_work/EasIFA2.0_Core/test/test_inferece_input/AF-A0A2K5QMP9-F1-model_v4.pdb"
+    "enzyme_structure": "test/test_inferece_input/AF-A0A2K5QMP9-F1-model_v4.pdb"
   }
 ]
