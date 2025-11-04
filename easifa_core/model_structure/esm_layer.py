@@ -434,10 +434,10 @@ class EvolutionaryScaleModeling(nn.Module):
             graph = graph.subresidue(mask)
         size_ext = size
         if self.alphabet.prepend_bos:
-            bos = torch.ones(graph.batch_size, dtype=torch.long, device=self.device) * self.alphabet.cls_idx
+            bos = torch.ones(graph.batch_size, dtype=torch.long, device=next(self.parameters()).device) * self.alphabet.cls_idx
             input, size_ext = functional._extend(bos, torch.ones_like(size_ext), input, size_ext)
         if self.alphabet.append_eos:
-            eos = torch.ones(graph.batch_size, dtype=torch.long, device=self.device) * self.alphabet.eos_idx
+            eos = torch.ones(graph.batch_size, dtype=torch.long, device=next(self.parameters()).device) * self.alphabet.eos_idx
             input, size_ext = functional._extend(input, size_ext, eos, torch.ones_like(size_ext))
         input = functional.variadic_to_padded(input, size_ext, value=self.alphabet.padding_idx)[0]
 
