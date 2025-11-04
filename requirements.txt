@@ -2,6 +2,7 @@
 torch>=1.10.0
 numpy>=1.19.0
 pyyaml>=5.4.0
+safetensors>=0.3.0
 
 # Chemistry and Molecular Biology
 rdkit>=2022.03.1

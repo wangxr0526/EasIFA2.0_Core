@@ -8,6 +8,7 @@ import dgl
 import numpy as np
 from Bio import pairwise2
 from transformers.tokenization_utils_base import BatchEncoding
+from safetensors.torch import load_file as load_safetensors
 
 
 
@@ -29,6 +30,7 @@ def colorize(text, color):
 def read_model_state(model_save_path):
     """
     Read model state and arguments from checkpoint directory.
+    Supports both .pth and .safetensors formats (prefers safetensors if available).
     
     Args:
         model_save_path: Path to checkpoint directory
@@ -37,13 +39,26 @@ def read_model_state(model_save_path):
         model_state: Model state dict
         args: Model arguments dict
     """
-    model_state_fname = os.path.join(model_save_path, 'model.pth')
+    # Check for safetensors first (preferred), then fall back to .pth
+    safetensors_fname = os.path.join(model_save_path, 'model.safetensors')
+    pth_fname = os.path.join(model_save_path, 'model.pth')
     args_fname = os.path.join(model_save_path, 'args.yml')
 
-    model_state = torch.load(model_state_fname, map_location=torch.device('cpu'))
-    keys = list(model_state.keys())
-    if keys and 'module.' in keys[0]:
-        model_state = {k.replace('module.', ''): v for k, v in model_state.items()}
+    if os.path.exists(safetensors_fname):
+        # Load from safetensors (faster and safer)
+        model_state = load_safetensors(safetensors_fname)
+    elif os.path.exists(pth_fname):
+        # Fall back to .pth format
+        model_state = torch.load(pth_fname, map_location=torch.device('cpu'))
+        keys = list(model_state.keys())
+        if keys and 'module.' in keys[0]:
+            model_state = {k.replace('module.', ''): v for k, v in model_state.items()}
+    else:
+        raise FileNotFoundError(
+            f"No model file found in {model_save_path}. "
+            f"Expected either 'model.safetensors' or 'model.pth'"
+        )
+    
     args = yaml.load(open(args_fname, "r"), Loader=yaml.FullLoader)
 
     return model_state, args
