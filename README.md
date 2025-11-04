@@ -1,0 +1,159 @@
+# EasIFA Core - Enzyme Active Site Inference Framework
+
+EasIFA Core is the inference module for predicting enzyme active sites using protein structures and/or sequences, optionally with reaction information.
+
+## Features
+
+- Multiple model support:
+  - **all_features**: Full model with enzyme structure + reaction information
+  - **wo_structures**: Sequence-only model with reaction information  
+  - **wo_reactions**: Structure-only model without reaction information
+  - **wo_rxn_structures**: Sequence-only model without reaction information
+
+- Flexible input:
+  - Protein structure (PDB file) and/or amino acid sequence
+  - Optional reaction SMILES string
+  
+- Easy-to-use command-line interface
+
+## Installation
+
+```bash
+pip install -e .
+```
+
+Or install from source:
+
+```bash
+git clone https://github.com/wangxr0526/EasIFA2.git
+cd EasIFA2.0_Core
+pip install -e .
+```
+
+## Requirements
+
+- Python >= 3.8
+- PyTorch >= 1.10
+- RDKit
+- DGL (Deep Graph Library)
+- ESM (Evolutionary Scale Modeling)
+- TorchDrug
+- Other dependencies (see requirements.txt)
+
+## Usage
+
+### Command Line Interface
+
+#### Predict with structure and reaction:
+
+```bash
+easifa-predict \
+    --enzyme-structure /path/to/protein.pdb \
+    --rxn-smiles "reactant>>product" \
+    --output result.json
+```
+
+#### Predict with sequence and reaction:
+
+```bash
+easifa-predict \
+    --enzyme-sequence "MSPRPLRALLGAAAAALVSAAALAFPSQAAANDSPFYVNPNMSS..." \
+    --rxn-smiles "reactant>>product" \
+    --output result.json
+```
+
+#### Predict with structure only (no reaction):
+
+```bash
+easifa-predict \
+    --enzyme-structure /path/to/protein.pdb \
+    --output result.json
+```
+
+#### Predict with sequence only (no reaction):
+
+```bash
+easifa-predict \
+    --enzyme-sequence "MSPRPLRALLGAAAAALVSAAALAFPSQAAANDSPFYVNPNMSS..." \
+    --output result.json
+```
+
+#### Batch prediction from JSON file:
+
+```bash
+easifa-predict \
+    --batch-input batch_input.json \
+    --output batch_results.json \
+    --verbose
+```
+
+See `BATCH_PREDICTION_GUIDE.md` for detailed batch prediction instructions and JSON format.
+
+### Python API
+
+```python
+from easifa_core import EasIFAInferenceAPI, EasIFAInferenceConfig
+
+# Initialize configuration
+config = EasIFAInferenceConfig()
+
+# Create inference API
+easifa = EasIFAInferenceAPI(config)
+
+# Predict with structure and reaction
+pred, prob = easifa.inference(
+    rxn_smiles="O.OCC1OC(OC2C(O)C(CO)OC(OC3C(O)C(O)OC(CO)C3O)C2O)C(O)C(O)C1O>>O=C[C@H](O)[C@@H](O)[C@H](O)[C@H](O)CO",
+    enzyme_structure_path="/path/to/protein.pdb"
+)
+
+# Predict with sequence and reaction
+pred, prob = easifa.inference(
+    rxn_smiles="O.OCC1OC(OC2C(O)C(CO)OC(OC3C(O)C(O)OC(CO)C3O)C2O)C(O)C(O)C1O>>O=C[C@H](O)[C@@H](O)[C@H](O)[C@H](O)CO",
+    enzyme_aa_sequence="MSPRPLRALLGAAAAALVSAAALAFPSQAAANDSPFYVNPNMSS..."
+)
+
+# Results
+print(f"Predicted labels: {pred}")  # Per-residue site type predictions
+print(f"Probabilities: {prob}")      # Probability distributions
+```
+
+## Model Configuration
+
+The default configuration uses CPU for inference. To use GPU, modify the `gpu_allocations` in `EasIFAInferenceConfig`:
+
+```python
+config = EasIFAInferenceConfig()
+config.gpu_allocations = {
+    "all_features": 0,         # GPU 0
+    "wo_structures": 0,        # GPU 0
+    "wo_reactions": 0,         # GPU 0
+    "wo_rxn_structures": 0,    # GPU 0
+}
+```
+
+## Output Format
+
+The inference returns:
+- `pred`: Predicted active site type labels for each residue (0: non-site, 1: BINDING, 2: ACT_SITE, 3: SITE)
+- `prob`: Probability distribution over site types for each residue
+
+## License
+
+MIT License
+
+## Citation
+
+If you use EasIFA in your research, please cite:
+
+```bibtex
+@article{easifa2024,
+  title={EasIFA: Enzyme Active Site Inference Framework},
+  author={Your Name},
+  journal={Your Journal},
+  year={2024}
+}
+```
+
+## Contact
+
+For questions and feedback, please contact: your.email@example.com

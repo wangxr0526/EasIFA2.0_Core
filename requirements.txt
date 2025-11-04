@@ -1,0 +1,20 @@
+# Core dependencies
+torch>=1.10.0
+numpy>=1.19.0
+pyyaml>=5.4.0
+
+# Chemistry and Molecular Biology
+rdkit>=2022.03.1
+biopython>=1.79
+
+# Deep Learning Libraries
+dgl>=0.9.0
+dgllife>=0.3.0
+fair-esm>=2.0.0
+torchdrug>=0.2.0
+
+# Transformers and NLP
+transformers>=4.20.0
+
+# Utilities
+tqdm>=4.60.0
