@@ -52,42 +52,73 @@ This will automatically download model checkpoints and set up the conda environm
 
 ### Command Line Interface
 
-#### Predict with structure and reaction:
+EasIFA supports both single and batch predictions via the command line.
+
+#### Single Prediction Examples
+
+**1. Predict with structure and reaction:**
 
 ```bash
 easifa-predict \
-    --enzyme-structure /path/to/protein.pdb \
-    --rxn-smiles "reactant>>product" \
+    --enzyme-structure test/test_inferece_input/AF-A0A2K5QMP9-F1-model_v4.pdb \
+    --rxn-smiles "O.OCC1OC(OC2C(O)C(CO)OC(OC3C(O)C(O)OC(CO)C3O)C2O)C(O)C(O)C1O>>O=C[C@H](O)[C@@H](O)[C@H](O)[C@H](O)CO" \
     --output result.json
 ```
 
-#### Predict with sequence and reaction:
+**2. Predict with sequence and reaction:**
 
 ```bash
 easifa-predict \
-    --enzyme-sequence "MSPRPLRALLGAAAAALVSAAALAFPSQAAANDSPFYVNPNMSS..." \
-    --rxn-smiles "reactant>>product" \
+    --enzyme-sequence "MSPRPLRALLGAAAAALVSAAALAFPSQAAANDSPFYVNPNMSSAEWVRNNPNDPRTPVIRDRIASVPQGTWFAHHNPGQITGQVDALMSAAQAAGKIPILVVYNAPGRDCGNHSSGGAPSHSAYRSWIDEFAAGLKNRPAYIIVEPDLISLMSSCMQHVQQEVLETMAYAGKALKAGSSQARIYFDAGHSAWHSPAQMASWLQQADISNSAHGIATNTSNYRWTADEVAYAKAVLSAIGNPSLRAVIDTSRNGNGPAGNEWCDPSGRAIGTPSTTNTGDPMIDAFLWIKLPGEADGCIAGAGQFVPQAAYEMAIAAGGTNPNPNPNPTPTPTPTPTPPPGSSGACTATYTIANEWNDGFQATVTVTANQNITGWTVTWTFTDGQTITNAWNADVSTSGSSVTARNVGHNGTLSQGASTEFGFVGSKGNSNSVPTLTCAAS" \
+    --rxn-smiles "CC(=O)O>>CCO" \
     --output result.json
 ```
 
-#### Predict with structure only (no reaction):
+**3. Predict with sequence only (no reaction):**
 
 ```bash
 easifa-predict \
-    --enzyme-structure /path/to/protein.pdb \
+    --enzyme-sequence "MSPRLKQVNLCDEFGHIKLMNPQRSTVWY" \
     --output result.json
 ```
 
-#### Predict with sequence only (no reaction):
+**4. Predict with structure only (no reaction):**
 
 ```bash
 easifa-predict \
-    --enzyme-sequence "MSPRPLRALLGAAAAALVSAAALAFPSQAAANDSPFYVNPNMSS..." \
+    --enzyme-structure test/test_inferece_input/AF-A0A2K5QMP9-F1-model_v4.pdb \
     --output result.json
 ```
 
-#### Batch prediction from JSON file:
+#### Batch Prediction
 
+For processing multiple proteins, create a JSON file with your batch tasks:
+
+**batch_input.json:**
+```json
+[
+  {
+    "id": "protein_1",
+    "enzyme_structure": "test/test_inferece_input/AF-A0A2K5QMP9-F1-model_v4.pdb",
+    "rxn_smiles": "O.OCC1OC(OC2C(O)C(CO)OC(OC3C(O)C(O)OC(CO)C3O)C2O)C(O)C(O)C1O>>O=C[C@H](O)[C@@H](O)[C@H](O)[C@H](O)CO"
+  },
+  {
+    "id": "protein_2",
+    "enzyme_sequence": "MSPRPLRALLGAAAAALVSAAALAFPSQAAANDSPFYVNPNMSSAEWVRNNPNDPRTPVIRDRIASVPQGTWFAHHNPGQITGQVDALMSAAQAAGKIPILVVYNAPGRDCGNHSSGGAPSHSAYRSWIDEFAAGLKNRPAYIIVEPDLISLMSSCMQHVQQEVLETMAYAGKALKAGSSQARIYFDAGHSAWHSPAQMASWLQQADISNSAHGIATNTSNYRWTADEVAYAKAVLSAIGNPSLRAVIDTSRNGNGPAGNEWCDPSGRAIGTPSTTNTGDPMIDAFLWIKLPGEADGCIAGAGQFVPQAAYEMAIAAGGTNPNPNPNPTPTPTPTPTPPPGSSGACTATYTIANEWNDGFQATVTVTANQNITGWTVTWTFTDGQTITNAWNADVSTSGSSVTARNVGHNGTLSQGASTEFGFVGSKGNSNSVPTLTCAAS",
+    "rxn_smiles": "CC(=O)O>>CCO"
+  },
+  {
+    "id": "protein_3_no_reaction",
+    "enzyme_sequence": "MSPRLKQVNLCDEFGHIKLMNPQRSTVWY"
+  },
+  {
+    "id": "protein_4_structure_only",
+    "enzyme_structure": "test/test_inferece_input/AF-A0A2K5QMP9-F1-model_v4.pdb"
+  }
+]
+```
+
+**Run batch prediction:**
 ```bash
 easifa-predict \
     --batch-input batch_input.json \
@@ -95,7 +126,9 @@ easifa-predict \
     --verbose
 ```
 
-See `BATCH_PREDICTION_GUIDE.md` for detailed batch prediction instructions and JSON format.
+**Note:** All file paths in the batch input JSON are resolved relative to your current working directory.
+
+See `BATCH_PREDICTION_GUIDE.md` for more detailed batch prediction instructions.
 
 ### Python API
 
@@ -108,21 +141,37 @@ config = EasIFAInferenceConfig()
 # Create inference API
 easifa = EasIFAInferenceAPI(config)
 
-# Predict with structure and reaction
+# Example 1: Predict with structure and reaction
 pred, prob = easifa.inference(
     rxn_smiles="O.OCC1OC(OC2C(O)C(CO)OC(OC3C(O)C(O)OC(CO)C3O)C2O)C(O)C(O)C1O>>O=C[C@H](O)[C@@H](O)[C@H](O)[C@H](O)CO",
-    enzyme_structure_path="/path/to/protein.pdb"
+    enzyme_structure_path="test/test_inferece_input/AF-A0A2K5QMP9-F1-model_v4.pdb"
 )
 
-# Predict with sequence and reaction
+# Example 2: Predict with sequence and reaction
 pred, prob = easifa.inference(
-    rxn_smiles="O.OCC1OC(OC2C(O)C(CO)OC(OC3C(O)C(O)OC(CO)C3O)C2O)C(O)C(O)C1O>>O=C[C@H](O)[C@@H](O)[C@H](O)[C@H](O)CO",
-    enzyme_aa_sequence="MSPRPLRALLGAAAAALVSAAALAFPSQAAANDSPFYVNPNMSS..."
+    rxn_smiles="CC(=O)O>>CCO",
+    enzyme_aa_sequence="MSPRPLRALLGAAAAALVSAAALAFPSQAAANDSPFYVNPNMSSAEWVRNNPNDPRTPVIRDRIASVPQGTWFAHHNPGQITGQVDALMSAAQAAGKIPILVVYNAPGRDCGNHSSGGAPSHSAYRSWIDEFAAGLKNRPAYIIVEPDLISLMSSCMQHVQQEVLETMAYAGKALKAGSSQARIYFDAGHSAWHSPAQMASWLQQADISNSAHGIATNTSNYRWTADEVAYAKAVLSAIGNPSLRAVIDTSRNGNGPAGNEWCDPSGRAIGTPSTTNTGDPMIDAFLWIKLPGEADGCIAGAGQFVPQAAYEMAIAAGGTNPNPNPNPTPTPTPTPTPPPGSSGACTATYTIANEWNDGFQATVTVTANQNITGWTVTWTFTDGQTITNAWNADVSTSGSSVTARNVGHNGTLSQGASTEFGFVGSKGNSNSVPTLTCAAS"
 )
 
-# Results
-print(f"Predicted labels: {pred}")  # Per-residue site type predictions
-print(f"Probabilities: {prob}")      # Probability distributions
+# Example 3: Predict with sequence only (no reaction)
+pred, prob = easifa.inference(
+    enzyme_aa_sequence="MSPRLKQVNLCDEFGHIKLMNPQRSTVWY"
+)
+
+# Example 4: Predict with structure only (no reaction)
+pred, prob = easifa.inference(
+    enzyme_structure_path="test/test_inferece_input/AF-A0A2K5QMP9-F1-model_v4.pdb"
+)
+
+# Results format
+print(f"Predicted labels: {pred}")  # Per-residue site type predictions (0-3)
+print(f"Probabilities: {prob}")      # Probability distributions per residue
+
+# Site type mapping:
+# 0: non-site
+# 1: BINDING
+# 2: ACT_SITE
+# 3: SITE
 ```
 
 ## Model Configuration
