@@ -25,7 +25,8 @@ EasIFA Core is the inference module for predicting enzyme active sites using pro
 ```bash
 git clone https://github.com/wangxr0526/EasIFA2.0_Core.git
 cd EasIFA2.0_Core
-bash quick_setup.sh
+# bash quick_setup_ch.sh  # Accelerated download for Mainland China
+bash quick_setup_intl.sh  # Download from Hugging Face
 ```
 
 This will automatically download model checkpoints and set up the conda environment.
