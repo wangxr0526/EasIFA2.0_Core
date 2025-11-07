@@ -60,6 +60,7 @@ conda activate "$ENV_DIR"
 if [ -f "${ENV_DIR}/bin/conda-unpack" ]; then
     conda-unpack
 fi
+pip install -e .
 conda deactivate
 
 echo -e "${GREEN}✓ Environment ready${NC}\n"

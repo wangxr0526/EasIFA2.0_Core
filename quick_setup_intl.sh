@@ -87,6 +87,7 @@ if [ -f "${ENV_DIR}/bin/conda-unpack" ]; then
 else
     echo -e "${YELLOW}Warning: conda-unpack not found, skipping...${NC}"
 fi
+pip install -e .
 conda deactivate
 
 echo -e "${GREEN}✓ Environment ready${NC}\n"
