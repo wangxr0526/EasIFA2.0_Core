@@ -2,6 +2,15 @@
 
 EasIFA Core is the inference module for predicting enzyme active sites using protein structures and/or sequences, optionally with reaction information.
 
+## 🌐 Web Server
+
+Try EasIFA online without installation:
+
+- **🚀 Primary Server**: [https://cadd.zju.edu.cn/easifa/](https://cadd.zju.edu.cn/easifa/)
+- **🔄 Alternative Server**: [http://cadd.iddd.group/easifa/](http://cadd.iddd.group/easifa/)
+
+---
+
 ![alt text](images/all_models.png)
 
 ## Features
