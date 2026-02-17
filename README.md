@@ -7,7 +7,9 @@ EasIFA Core is the inference module for predicting enzyme active sites using pro
 Try EasIFA online without installation:
 
 - **🚀 Primary Server**: [https://cadd.zju.edu.cn/easifa/](https://cadd.zju.edu.cn/easifa/)
-- **🔄 Alternative Server**: [http://cadd.iddd.group/easifa/](http://cadd.iddd.group/easifa/)
+- **🔄 Alternative Server 1**: [http://cadd.iddd.group/easifa/](http://cadd.iddd.group/easifa/)
+
+- **🔄 Alternative Server 2**: [http://cadd.drugflow.com/easifa/](http://cadd.drugflow.com/easifa/)
 
 ---
 
