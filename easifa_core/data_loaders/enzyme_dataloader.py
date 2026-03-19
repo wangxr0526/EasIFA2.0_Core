@@ -8,12 +8,18 @@ from torchdrug import utils
 from torchdrug.core import Registry as R
 from pandarallel import pandarallel
 
+from common.residue_constants import NONSTANDARD_RESIDUE_MAP, validate_and_replace_residues_3letter
+
 
 def get_structure_sequence(pdb_file):
     try:
         mol = Chem.MolFromPDBFile(pdb_file)
+        if mol is None:
+            warnings.warn(f"RDKit cannot parse PDB file: {pdb_file}")
+            return ''
         protein_sequence = Chem.MolToSequence(mol)
-    except:
+    except Exception as e:
+        warnings.warn(f"Failed to extract sequence from {pdb_file}: {e}")
         protein_sequence = ''
     return protein_sequence
 
@@ -79,18 +85,26 @@ class MyProtein(data.Protein):
             canonical_residue = (number, code, type)
             if canonical_residue != last_residue:
                 last_residue = canonical_residue
-                if (type not in cls.residue2id) and (type in ('HIE', 'HID', 'HIP')):
-                    warnings.warn('Other forms of histidine: `%s`' % type)
-                    type = "HIS"
-                elif (type not in cls.residue2id) and (type not in ('HIE', 'HID', 'HIP')):
-                    warnings.warn("Unknown residue `%s`. Treat as glycine" % type)
-                    type = "GLY"
+                if type not in cls.residue2id:
+                    if type in NONSTANDARD_RESIDUE_MAP:
+                        mapped = NONSTANDARD_RESIDUE_MAP[type]
+                        warnings.warn(f"Non-standard residue `{type}` mapped to `{mapped}`")
+                        type = mapped
+                    else:
+                        warnings.warn("Unknown residue `%s`. Treat as glycine" % type)
+                        type = "GLY"
                 residue_type.append(cls.residue2id[type])
                 residue_number.append(number)
-                if pdbinfo.GetInsertionCode() not in cls.alphabet2id or pdbinfo.GetChainId() not in cls.alphabet2id:
-                    return None
-                insertion_code.append(cls.alphabet2id[pdbinfo.GetInsertionCode()])
-                chain_id.append(cls.alphabet2id[pdbinfo.GetChainId()])
+                ins_code = pdbinfo.GetInsertionCode()
+                ch_id = pdbinfo.GetChainId()
+                if ins_code not in cls.alphabet2id:
+                    warnings.warn(f"Unknown insertion code `{ins_code}`, replacing with ' '")
+                    ins_code = ' '
+                if ch_id not in cls.alphabet2id:
+                    warnings.warn(f"Unknown chain ID `{ch_id}`, replacing with 'A'")
+                    ch_id = 'A'
+                insertion_code.append(cls.alphabet2id[ins_code])
+                chain_id.append(cls.alphabet2id[ch_id])
                 feature = []
                 for name in residue_feature:
                     func = R.get("features.residue.%s" % name)

@@ -99,6 +99,8 @@ GEOM_IDX2ATOM = {0: 'C', 1: 'O', 2: 'N', 3: 'F', 4: 'S', 5: 'Cl', 6: 'Br', 7: 'I
 # Atomic numbers (Z)
 CHARGES = {'C': 6, 'O': 8, 'N': 7, 'F': 9, 'S': 16, 'Cl': 17, 'Br': 35, 'I': 53}
 
+from .residue_constants import NONSTANDARD_RESIDUE_MAP
+
 three_to_one = {
     'ALA': 'A', 'CYS': 'C', 'ASP': 'D', 'GLU': 'E',
     'PHE': 'F', 'GLY': 'G', 'HIS': 'H', 'ILE': 'I',
@@ -106,6 +108,12 @@ three_to_one = {
     'PRO': 'P', 'GLN': 'Q', 'ARG': 'R', 'SER': 'S',
     'THR': 'T', 'VAL': 'V', 'TRP': 'W', 'TYR': 'Y'
 }
+
+# Extend three_to_one with non-standard residue mappings
+# e.g., MSE -> MET -> 'M', SEP -> SER -> 'S', etc.
+for _ns_res, _std_res in NONSTANDARD_RESIDUE_MAP.items():
+    if _ns_res not in three_to_one and _std_res in three_to_one:
+        three_to_one[_ns_res] = three_to_one[_std_res]
 
 symbol2number = {v.symbol:k for k,v in elements._element.items()}
 number2symbol = {v:k for k,v in symbol2number.items()}
@@ -230,13 +238,25 @@ def create_cc_universe():
     u.add_TopologyAttr("name", ["C1", "C2"])
     u.add_TopologyAttr("type", ["C", "C"])
     u.add_TopologyAttr("element", ["C", "C"])
-    u.add_TopologyAttr("resname", ["LIG"])
+    u.add_TopologyAttr("resname", ["ALA"])
     u.add_TopologyAttr("resid", [1])
     u.add_TopologyAttr("segid", ["A"])
     u.atoms.positions = np.array([[0.0, 0.0, 0.0], [1.54, 0.0, 0.0]])
     return u
 
 class RobustProteinMol:
+    # Element types that cause MDAnalysis guess_bonds() to crash (no VDW radii)
+    # Map to chemically similar standard elements
+    _ELEMENT_REMAP = {
+        'SE': 'S',   # Selenium → Sulfur (selenomethionine)
+        'E': 'S',    # Misread SE → Sulfur
+    }
+    # Metal element types that should NOT participate in covalent bond guessing
+    _METAL_TYPES = {
+        'FE', 'ZN', 'MG', 'CA', 'CU', 'MN', 'CO', 'NI', 'NA', 'K',
+        'MO', 'CD', 'W', 'V', 'CR', 'HG', 'PT', 'AU', 'AG',
+    }
+
     def __init__(self, pdb_file=None, mol=None):
         if mol is not None:
             self.u = mol
@@ -244,8 +264,23 @@ class RobustProteinMol:
             self.u = mda.Universe(pdb_file)
         else:
             self.u = mda.Universe.empty(n_atoms=0)
-        self.atoms = self.u.select_atoms("not type HETATM").atoms
-        self.residues = self.u.select_atoms("not type HETATM").residues
+
+        # Use "protein" selector to properly exclude water, ligands, and metals.
+        # Also include known non-standard amino acid residues (MSE, SEP, etc.)
+        nonstd_resnames = list(NONSTANDARD_RESIDUE_MAP.keys())
+        sel_str = "protein"
+        if nonstd_resnames:
+            sel_str += " or resname " + " ".join(nonstd_resnames)
+        try:
+            selected = self.u.select_atoms(sel_str)
+        except Exception:
+            # Fallback: select all non-solvent atoms
+            try:
+                selected = self.u.select_atoms("not resname HOH WAT DOD TIP TIP3 SOL")
+            except Exception:
+                selected = self.u.atoms
+        self.atoms = selected.atoms
+        self.residues = selected.residues
 
         # 缓存属性
         self._atom_names = None
@@ -347,24 +382,210 @@ class RobustProteinMol:
             prev_chain = chain
 
         return sequence
+    def _sanitize_atom_types_for_bonds(self):
+        """Remap problematic element/type attributes so guess_bonds() can find VDW radii."""
+        remapped = []
+        for atom in self.u.atoms:
+            atype = (atom.type or '').strip().upper()
+            if atype in self._ELEMENT_REMAP:
+                new_type = self._ELEMENT_REMAP[atype]
+                remapped.append((atom.index, atom.type, atom.element))
+                atom.type = new_type
+                atom.element = new_type
+        return remapped
+
+    def _restore_atom_types(self, saved):
+        """Restore original element/type attributes after bond guessing."""
+        for idx, orig_type, orig_elem in saved:
+            self.u.atoms[idx].type = orig_type
+            self.u.atoms[idx].element = orig_elem
+
+    def _bondable_element(self, atom):
+        """Return a valid element symbol for bond order lookup, or None for metals/unknowns."""
+        elem = (getattr(atom, 'element', '') or '').strip()
+        if len(elem) > 1:
+            elem = elem[0].upper() + elem[1:].lower()
+        else:
+            elem = elem.upper()
+        if elem in BONDS_1:
+            return elem
+        upper = elem.upper()
+        if upper in self._ELEMENT_REMAP:
+            return self._ELEMENT_REMAP[upper]
+        if upper in self._METAL_TYPES:
+            return None
+        # Try to infer from atom name
+        name = (getattr(atom, 'name', '') or '').strip().upper()
+        for prefix in ('C', 'N', 'O', 'S', 'H', 'P'):
+            if name.startswith(prefix):
+                return prefix
+        return None
+
+    def _fallback_bond_orders(self, dists):
+        """Distance-based bond inference when MDAnalysis guess_bonds() fails."""
+        bond_orders = []
+        n = len(self.atoms)
+        # Only check pairs within max single bond distance (~2.5 Å)
+        close_mask = (dists < 2.5) & (dists > 0.1)
+        pairs = close_mask.nonzero(as_tuple=False)
+        for pair in pairs:
+            i, j = pair[0].item(), pair[1].item()
+            if i >= j:
+                continue
+            elem_i = self._bondable_element(self.atoms[i])
+            elem_j = self._bondable_element(self.atoms[j])
+            if elem_i is None or elem_j is None:
+                continue
+            order = get_bond_order(elem_i, elem_j, distance=dists[i, j].item())
+            if order > 0:
+                bond_orders.append((i, j, order))
+        return bond_orders
+
     @property
     def bond_orders(self):
         if self._bond_orders is None:
             pos = torch.tensor(self.atom_positions, dtype=torch.float32).unsqueeze(0)
             dists = torch.cdist(pos, pos, p=2).squeeze(0)
-            self.u.atoms.guess_bonds()
-            bond_orders = []
-            for bond in self.u.bonds:
-                i, j = bond.indices  # 原子索引对
-                elem_i = bond.atoms[0].element
-                elem_j = bond.atoms[1].element
-                dist = dists[i, j].item()  # 获取距离数值
-                order = get_bond_order(elem_i, elem_j, distance=dist)
-                bond_orders.append((i, j, order))
-            self._bond_orders = bond_orders
+
+            saved_types = self._sanitize_atom_types_for_bonds()
+            try:
+                self.u.atoms.guess_bonds()
+                bond_orders = []
+                for bond in self.u.bonds:
+                    i, j = bond.indices
+                    elem_i = bond.atoms[0].element
+                    elem_j = bond.atoms[1].element
+                    dist = dists[i, j].item()
+                    order = get_bond_order(elem_i, elem_j, distance=dist)
+                    bond_orders.append((i, j, order))
+                self._bond_orders = bond_orders
+            except Exception as e:
+                warnings.warn(
+                    f"MDAnalysis guess_bonds() failed: {e}. "
+                    f"Using distance-based bond inference as fallback."
+                )
+                self._bond_orders = self._fallback_bond_orders(dists)
+            finally:
+                self._restore_atom_types(saved_types)
         return self._bond_orders
-    
-        
+
+    # --- RDKit-compatible adapter methods for RobustMolecule.from_molecule_robust ---
+
+    def GetNumBonds(self):
+        """Return the number of bonds (RDKit-compatible API)."""
+        return len(self.bond_orders)
+
+    def GetBondWithIdx(self, idx):
+        """Return a RobustBond adapter for the given bond index (RDKit-compatible API)."""
+        i, j, order = self.bond_orders[idx]
+        return RobustBond(i, j, order)
+
+    def GetNumAtoms(self):
+        """Return the number of atoms (RDKit-compatible API)."""
+        return len(self.atoms)
+
+    def GetAtomWithIdx(self, idx):
+        """Return atom at given index, wrapped with RDKit-compatible API."""
+        return RobustAtomWrapper(self.atoms[idx])
+
+    def node_positions(self, use_residue_as_node=False):
+        """Return atom or residue positions."""
+        if use_residue_as_node:
+            return self.residue_positions
+        return self.atom_positions
+
+
+_BOND_ORDER_TO_RDKIT_TYPE = {
+    1: Chem.rdchem.BondType.SINGLE,
+    2: Chem.rdchem.BondType.DOUBLE,
+    3: Chem.rdchem.BondType.TRIPLE,
+}
+
+
+class RobustBond:
+    """Adapter that mimics RDKit Bond API for use with torchdrug's Molecule graph construction."""
+
+    def __init__(self, begin_idx, end_idx, order):
+        self._begin = begin_idx
+        self._end = end_idx
+        self._order = order
+
+    def GetBeginAtomIdx(self):
+        return self._begin
+
+    def GetEndAtomIdx(self):
+        return self._end
+
+    def GetBondType(self):
+        return _BOND_ORDER_TO_RDKIT_TYPE.get(self._order, Chem.rdchem.BondType.SINGLE)
+
+    def GetBondTypeAsDouble(self):
+        return float(self._order)
+
+    def GetBondDir(self):
+        return 0  # NONE
+
+    def GetStereo(self):
+        return 0  # STEREONONE
+
+    def GetStereoAtoms(self):
+        return [0, 0]
+
+    def GetIsAromatic(self):
+        return False
+
+    def GetIsConjugated(self):
+        return False
+
+
+class RobustPDBResidueInfo:
+    """Adapter that mimics RDKit PDBResidueInfo for MDAnalysis atoms."""
+
+    def __init__(self, atom):
+        self._atom = atom
+
+    def GetResidueName(self):
+        return f"{self._atom.resname:>3s}"
+
+    def GetResidueNumber(self):
+        return int(self._atom.resid)
+
+    def GetInsertionCode(self):
+        icode = getattr(self._atom, 'icode', ' ')
+        return icode if icode else ' '
+
+    def GetChainId(self):
+        return self._atom.segid if self._atom.segid else 'A'
+
+    def GetName(self):
+        name = self._atom.name
+        # PDB atom name is 4 chars, left-padded for 1-char elements
+        if len(name) < 4:
+            name = f" {name:<3s}"
+        return name
+
+    def GetIsHeteroAtom(self):
+        return False  # RobustProteinMol already filters HETATM
+
+    def GetOccupancy(self):
+        return getattr(self._atom, 'occupancy', 1.0)
+
+    def GetTempFactor(self):
+        return getattr(self._atom, 'tempfactor', 0.0)
+
+
+class RobustAtomWrapper:
+    """Wraps an MDAnalysis atom to provide RDKit-compatible interface."""
+
+    def __init__(self, atom):
+        self._atom = atom
+        self._pdbinfo = RobustPDBResidueInfo(atom)
+
+    def GetPDBResidueInfo(self):
+        return self._pdbinfo
+
+    def GetAtomicNum(self):
+        return symbol2number.get(self._atom.element.capitalize(), 0)
 
 class RobustMolecule(data.Molecule):
     empty_mol = RobustProteinMol(None)
@@ -427,7 +648,7 @@ class RobustMolecule(data.Molecule):
             #     func = R.get("features.atom.%s" % name)
             #     feature += func(atom)
             # _atom_feature.append(feature)
-        atom_type = torch.tensor(atom_type)[:-1]
+        atom_type = torch.tensor(atom_type)
         # atom_map = torch.tensor(atom_map)[:-1]
         # formal_charge = torch.tensor(formal_charge)[:-1]
         # explicit_hs = torch.tensor(explicit_hs)[:-1]
@@ -446,17 +667,17 @@ class RobustMolecule(data.Molecule):
         dummy_bond = copy(cls.dummy_mol).GetBondWithIdx(0)
         bonds = [mol.GetBondWithIdx(i) for i in range(mol.GetNumBonds())] + [dummy_bond]
         for bond in bonds:
-            # type = str(bond.GetBondType())
+            btype = bond.GetBondType()
             # stereo = bond.GetStereo()
             # if stereo:
             #     _atoms = [a for a in bond.GetStereoAtoms()]
             # else:
             #     _atoms = [0, 0]
-            # if type not in cls.bond2id:
-            #     continue
-            type = cls.bond2id[type]
+            if btype not in cls.bond2id:
+                continue
+            btype_id = cls.bond2id[btype]
             h, t = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
-            edge_list += [[h, t, type], [t, h, type]]
+            edge_list += [[h, t, btype_id], [t, h, btype_id]]
             # always explicitly store aromatic bonds, no matter kekulize or not
             # if bond.GetIsAromatic():
             #     type = cls.bond2id["AROMATIC"]
@@ -572,18 +793,25 @@ class RobustProtein(data.Protein):
             if canonical_residue != last_residue:
                 last_residue = canonical_residue
                 if type not in cls.residue2id:
-                    warnings.warn("Unknown residue `%s`. Treat as glycine" % type)
-                    type = "GLY"
+                    if type in NONSTANDARD_RESIDUE_MAP:
+                        mapped = NONSTANDARD_RESIDUE_MAP[type]
+                        warnings.warn(f"Non-standard residue `{type}` mapped to `{mapped}`")
+                        type = mapped
+                    else:
+                        warnings.warn("Unknown residue `%s`. Treat as glycine" % type)
+                        type = "GLY"
                 residue_type.append(cls.residue2id[type])
                 residue_number.append(number)
-                if pdbinfo.GetInsertionCode() not in cls.alphabet2id:
-                    warnings.warn(f"Fail to create the protein. Unknown insertion code {pdbinfo.GetInsertionCode()}.")
-                    return None
-                if pdbinfo.GetChainId() not in cls.alphabet2id:
-                    warnings.warn(f"Fail to create the protein. Unknown chain id {pdbinfo.GetChainId()}.")
-                    return None
-                insertion_code.append(cls.alphabet2id[pdbinfo.GetInsertionCode()])
-                chain_id.append(cls.alphabet2id[pdbinfo.GetChainId()])
+                ins_code = pdbinfo.GetInsertionCode()
+                ch_id = pdbinfo.GetChainId()
+                if ins_code not in cls.alphabet2id:
+                    warnings.warn(f"Unknown insertion code `{ins_code}`, replacing with ' '")
+                    ins_code = ' '
+                if ch_id not in cls.alphabet2id:
+                    warnings.warn(f"Unknown chain ID `{ch_id}`, replacing with 'A'")
+                    ch_id = 'A'
+                insertion_code.append(cls.alphabet2id[ins_code])
+                chain_id.append(cls.alphabet2id[ch_id])
                 feature = []
                 for name in residue_feature:
                     func = R.get("features.residue.%s" % name)

@@ -11,11 +11,17 @@ import os
 from pathlib import Path
 
 try:
-    from easifa_core import EasIFAInferenceAPI, EasIFAInferenceConfig
+    from easifa_core import (
+        EasIFAInferenceAPI, EasIFAInferenceConfig,
+        EasIFAPreprocessingError, EasIFASequenceTooLongError, EasIFAModelError,
+    )
 except ImportError:
     # If running from source without installation
     sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-    from easifa_core import EasIFAInferenceAPI, EasIFAInferenceConfig
+    from easifa_core import (
+        EasIFAInferenceAPI, EasIFAInferenceConfig,
+        EasIFAPreprocessingError, EasIFASequenceTooLongError, EasIFAModelError,
+    )
 
 
 def parse_args():
@@ -240,39 +246,72 @@ def run_inference(args, config):
     if args.verbose:
         print("Running inference...")
     
-    results = easifa.inference(
-        rxn_smiles=args.rxn_smiles,
-        enzyme_structure_path=args.enzyme_structure,
-        enzyme_aa_sequence=args.enzyme_sequence,
-    )
-    
-    if results is None:
-        print("Error: Inference failed. Sequence may be too long or invalid.", file=sys.stderr)
+    try:
+        result = easifa.inference(
+            rxn_smiles=args.rxn_smiles,
+            enzyme_structure_path=args.enzyme_structure,
+            enzyme_aa_sequence=args.enzyme_sequence,
+        )
+    except EasIFASequenceTooLongError as e:
+        print(f"Error: Sequence too long - {e}", file=sys.stderr)
         sys.exit(1)
-    
-    pred, prob = results
-    
-    # Prepare output
-    output_data = {
-        'model_used': easifa.model_to_inference,
-        'input': {
-            'enzyme_structure': args.enzyme_structure,
-            'enzyme_sequence': args.enzyme_sequence if args.enzyme_sequence else easifa.caculated_sequence,
-            'rxn_smiles': args.rxn_smiles,
-        },
-        'predictions': {
-            'labels': pred,
-            'probabilities': prob,
-        },
-        'sequence_length': len(easifa.caculated_sequence),
-        'site_type_mapping': {
-            '0': 'non-site',
-            '1': 'BINDING',
-            '2': 'ACT_SITE',
-            '3': 'SITE',
-        }
+    except EasIFAPreprocessingError as e:
+        print(f"Error: Preprocessing failed - {e}", file=sys.stderr)
+        sys.exit(1)
+    except EasIFAModelError as e:
+        print(f"Error: Model inference failed - {e}", file=sys.stderr)
+        sys.exit(1)
+
+    # Prepare output — handle both single-chain (tuple) and multi-chain (dict) results
+    base_input = {
+        'enzyme_structure': args.enzyme_structure,
+        'enzyme_sequence': args.enzyme_sequence,
+        'rxn_smiles': args.rxn_smiles,
     }
-    
+    site_type_mapping = {
+        '0': 'non-site',
+        '1': 'BINDING',
+        '2': 'ACT_SITE',
+        '3': 'SITE',
+    }
+
+    if isinstance(result, dict):
+        # Multi-chain result
+        chain_results = {}
+        for chain_id, chain_data in result.items():
+            chain_results[chain_id] = {
+                'model_used': chain_data['model_used'],
+                'predictions': {
+                    'labels': chain_data['pred'],
+                    'probabilities': chain_data['prob'],
+                },
+                'sequence': chain_data['sequence'],
+                'sequence_length': chain_data['n_residues'],
+            }
+        output_data = {
+            'multi_chain': True,
+            'num_chains': len(chain_results),
+            'input': base_input,
+            'chains': chain_results,
+            'site_type_mapping': site_type_mapping,
+        }
+    else:
+        pred, prob = result
+        output_data = {
+            'multi_chain': False,
+            'model_used': easifa.model_to_inference,
+            'input': {
+                **base_input,
+                'enzyme_sequence': args.enzyme_sequence if args.enzyme_sequence else easifa.caculated_sequence,
+            },
+            'predictions': {
+                'labels': pred,
+                'probabilities': prob,
+            },
+            'sequence_length': len(easifa.caculated_sequence),
+            'site_type_mapping': site_type_mapping,
+        }
+
     return output_data
 
 
@@ -360,54 +399,92 @@ def run_batch_inference(args, config):
             rxn_smiles = task.get('rxn_smiles')
             enzyme_structure = task.get('enzyme_structure')
             enzyme_sequence = task.get('enzyme_sequence')
-            
+
             # Resolve relative paths relative to current working directory
             if enzyme_structure and not os.path.isabs(enzyme_structure):
                 enzyme_structure = os.path.join(cwd, enzyme_structure)
                 if args.verbose:
                     print(f"  Resolved structure path: {enzyme_structure}")
-            
+
             # Run inference
             result = easifa.inference(
                 rxn_smiles=rxn_smiles,
                 enzyme_structure_path=enzyme_structure,
                 enzyme_aa_sequence=enzyme_sequence,
             )
-            
-            if result is None:
-                print(f"  ✗ Failed: Sequence may be too long or invalid input")
-                failed_tasks.append({
-                    'id': task_id,
-                    'error': 'Inference returned None (sequence too long or invalid input)'
-                })
-                continue
-            
-            pred, prob = result
-            
-            # Store result (preserve original keys from input)
-            task_result = {
-                'id': task_id,
-                'model_used': easifa.model_to_inference,
-                'input': {
-                    'enzyme_structure': task.get('enzyme_structure'),  # Store original path from JSON
-                    'enzyme_sequence': enzyme_sequence if enzyme_sequence else easifa.caculated_sequence,
-                    'rxn_smiles': rxn_smiles,
-                },
-                'predictions': {
-                    'labels': pred,
-                    'probabilities': prob,
-                },
-                'sequence_length': len(easifa.caculated_sequence),
+
+            # Store result — handle both single-chain and multi-chain
+            base_input = {
+                'enzyme_structure': task.get('enzyme_structure'),
+                'enzyme_sequence': enzyme_sequence,
+                'rxn_smiles': rxn_smiles,
             }
-            
+
+            if isinstance(result, dict):
+                # Multi-chain result
+                chain_results = {}
+                for chain_id, chain_data in result.items():
+                    chain_results[chain_id] = {
+                        'model_used': chain_data['model_used'],
+                        'predictions': {
+                            'labels': chain_data['pred'],
+                            'probabilities': chain_data['prob'],
+                        },
+                        'sequence': chain_data['sequence'],
+                        'sequence_length': chain_data['n_residues'],
+                    }
+                task_result = {
+                    'id': task_id,
+                    'multi_chain': True,
+                    'num_chains': len(chain_results),
+                    'input': base_input,
+                    'chains': chain_results,
+                }
+                total_res = sum(c['sequence_length'] for c in chain_results.values())
+                print(f"  ✓ Success: {len(chain_results)} chains, {total_res} total residues")
+            else:
+                pred, prob = result
+                task_result = {
+                    'id': task_id,
+                    'multi_chain': False,
+                    'model_used': easifa.model_to_inference,
+                    'input': {
+                        **base_input,
+                        'enzyme_sequence': enzyme_sequence if enzyme_sequence else easifa.caculated_sequence,
+                    },
+                    'predictions': {
+                        'labels': pred,
+                        'probabilities': prob,
+                    },
+                    'sequence_length': len(easifa.caculated_sequence),
+                }
+                print(f"  ✓ Success: {len(easifa.caculated_sequence)} residues, model: {easifa.model_to_inference}")
+
             results.append(task_result)
-            print(f"  ✓ Success: {len(easifa.caculated_sequence)} residues, model: {easifa.model_to_inference}")
-            
-        except Exception as e:
-            print(f"  ✗ Error: {str(e)}")
+
+        except EasIFASequenceTooLongError as e:
+            print(f"  ✗ Sequence too long: {e}")
             failed_tasks.append({
                 'id': task_id,
-                'error': str(e)
+                'error': f'Sequence too long: {e}'
+            })
+        except EasIFAPreprocessingError as e:
+            print(f"  ✗ Preprocessing failed: {e}")
+            failed_tasks.append({
+                'id': task_id,
+                'error': f'Preprocessing failed: {e}'
+            })
+        except EasIFAModelError as e:
+            print(f"  ✗ Model error: {e}")
+            failed_tasks.append({
+                'id': task_id,
+                'error': f'Model error: {e}'
+            })
+        except Exception as e:
+            print(f"  ✗ Unexpected error: {str(e)}")
+            failed_tasks.append({
+                'id': task_id,
+                'error': f'Unexpected error: {str(e)}'
             })
     
     # Prepare output
@@ -467,32 +544,46 @@ def main():
             save_results(output_data, args.output, args.pretty, args.verbose)
             
             # Print summary
+            from collections import Counter
             print("\n" + "="*70)
             print("Inference Summary:")
             print("="*70)
-            print(f"Model used: {output_data['model_used']}")
-            print(f"Sequence length: {output_data['sequence_length']} residues")
-            
-            pred_labels = output_data['predictions']['labels']
-            if isinstance(pred_labels, list):
-                # Count predicted sites by type
-                from collections import Counter
-                site_counts = Counter(pred_labels)
-                print("\nPredicted active site residues:")
-                site_mapping = output_data['site_type_mapping']
-                
-                for site_type_id in sorted(site_counts.keys()):
-                    if site_type_id == 0:  # Skip non-sites for detail display
-                        continue
-                    site_name = site_mapping.get(str(site_type_id), 'unknown')
-                    count = site_counts[site_type_id]
-                    percentage = (count / output_data['sequence_length']) * 100
-                    print(f"  {site_name:12s}: {count:4d} residues ({percentage:.1f}%)")
-                
-                total_sites = sum(1 for x in pred_labels if x != 0)
-                total_percentage = (total_sites / output_data['sequence_length']) * 100
-                print(f"  {'Total sites':12s}: {total_sites:4d} residues ({total_percentage:.1f}%)")
-                print(f"  {'Non-sites':12s}: {site_counts.get(0, 0):4d} residues ({(site_counts.get(0, 0) / output_data['sequence_length']) * 100:.1f}%)")
+            site_mapping = output_data['site_type_mapping']
+
+            if output_data.get('multi_chain'):
+                print(f"Multi-chain PDB: {output_data['num_chains']} chains predicted")
+                for chain_id, chain_data in output_data['chains'].items():
+                    pred_labels = chain_data['predictions']['labels']
+                    seq_len = chain_data['sequence_length']
+                    total_sites = sum(1 for x in pred_labels if x != 0)
+                    print(f"\n  Chain {chain_id} ({seq_len} residues, model: {chain_data['model_used']}):")
+                    site_counts = Counter(pred_labels)
+                    for site_type_id in sorted(site_counts.keys()):
+                        if site_type_id == 0:
+                            continue
+                        site_name = site_mapping.get(str(site_type_id), 'unknown')
+                        count = site_counts[site_type_id]
+                        print(f"    {site_name:12s}: {count:4d} residues ({count/seq_len*100:.1f}%)")
+                    print(f"    {'Total sites':12s}: {total_sites:4d} residues ({total_sites/seq_len*100:.1f}%)")
+            else:
+                print(f"Model used: {output_data['model_used']}")
+                print(f"Sequence length: {output_data['sequence_length']} residues")
+
+                pred_labels = output_data['predictions']['labels']
+                if isinstance(pred_labels, list):
+                    site_counts = Counter(pred_labels)
+                    print("\nPredicted active site residues:")
+                    for site_type_id in sorted(site_counts.keys()):
+                        if site_type_id == 0:
+                            continue
+                        site_name = site_mapping.get(str(site_type_id), 'unknown')
+                        count = site_counts[site_type_id]
+                        percentage = (count / output_data['sequence_length']) * 100
+                        print(f"  {site_name:12s}: {count:4d} residues ({percentage:.1f}%)")
+                    total_sites = sum(1 for x in pred_labels if x != 0)
+                    total_percentage = (total_sites / output_data['sequence_length']) * 100
+                    print(f"  {'Total sites':12s}: {total_sites:4d} residues ({total_percentage:.1f}%)")
+                    print(f"  {'Non-sites':12s}: {site_counts.get(0, 0):4d} residues ({(site_counts.get(0, 0) / output_data['sequence_length']) * 100:.1f}%)")
             print("="*70)
         
     except KeyboardInterrupt:

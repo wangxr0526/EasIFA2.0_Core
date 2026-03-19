@@ -8,9 +8,17 @@ __version__ = '2.0.0'
 __author__ = 'EasIFA Team'
 
 from .config import EasIFAInferenceConfig
-from .interface.inference import EasIFAInferenceAPI
+from .interface.inference import (
+    EasIFAInferenceAPI,
+    EasIFAPreprocessingError,
+    EasIFASequenceTooLongError,
+    EasIFAModelError,
+)
 
 __all__ = [
     'EasIFAInferenceConfig',
     'EasIFAInferenceAPI',
+    'EasIFAPreprocessingError',
+    'EasIFASequenceTooLongError',
+    'EasIFAModelError',
 ]

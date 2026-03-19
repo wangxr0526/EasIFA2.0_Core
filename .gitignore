@@ -78,3 +78,7 @@ Thumbs.db
 .vscode
 .github
 checkpoints
+
+test
+PROD_EMBEDDING_SUMMARY.md
+robust_plan.md
