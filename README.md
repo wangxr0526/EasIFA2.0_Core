@@ -4,7 +4,10 @@ EasIFA Core is the inference module for predicting enzyme active sites using pro
 
 ## 🌐 Web Server
 
-Try EasIFA online without installation:
+> [!IMPORTANT]
+> **Service interruption notice:** The EasIFA web servers are currently unavailable because our computing infrastructure provider failed to honor its agreement and imposed an unacceptable unilateral price increase. We strongly condemn this irresponsible breach of commitment, which directly caused this service interruption under circumstances. Recovery work is underway, but service is not expected to resume soon. In the meantime, we strongly recommend deploying EasIFA Core locally by following the installation instructions below.
+
+When service is available, you can try EasIFA online without installation:
 
 - **🚀 Primary Server**: [https://cadd.zju.edu.cn/easifa/](https://cadd.zju.edu.cn/easifa/)
 - **🔄 Alternative Server 1**: [http://cadd.iddd.group/easifa/](http://cadd.iddd.group/easifa/)
@@ -215,4 +218,3 @@ If you use EasIFA in your research, please cite:
 
 ```
 ```
-
