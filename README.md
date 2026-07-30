@@ -5,7 +5,7 @@ EasIFA Core is the inference module for predicting enzyme active sites using pro
 ## 🌐 Web Server
 
 > [!IMPORTANT]
-> **Service interruption notice:** The EasIFA web servers are currently unavailable because our computing infrastructure provider failed to honor its agreement and imposed an unacceptable unilateral price increase. We strongly condemn this irresponsible breach of commitment, which directly caused this service interruption under circumstances. Recovery work is underway, but service is not expected to resume soon. In the meantime, we strongly recommend deploying EasIFA Core locally by following the installation instructions below.
+> **Service interruption notice:** The EasIFA web servers are currently unavailable following unexpected adjustments to the service terms and pricing of the third-party computing infrastructure supporting our deployment. We are actively working on a new deployment plan, but restoring service will take time and is not expected soon. In the meantime, we strongly recommend deploying EasIFA Core locally by following the installation instructions below.
 
 When service is available, you can try EasIFA online without installation:
 
